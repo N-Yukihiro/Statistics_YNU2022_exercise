@@ -1,0 +1,27 @@
+\documentclass[crop=true]{standalone}
+\usepackage{tikz}
+\usetikzlibrary{matrix}
+\usepackage{xltxtra}
+\usepackage{zxjatype} 
+\usepackage[ipaex]{zxjafont}
+
+\begin{document}
+
+\begin{tikzpicture}[scale = 2]
+  \matrix (m) [matrix of math nodes, row sep=3em, column sep=4em, minimum width=2em]
+  {
+     p \Rightarrow q & q \Rightarrow p \\
+     \bar{p} \Rightarrow \bar{q} & \bar{q} \Rightarrow \bar{p} \\
+  };
+  \path[-stealth]
+    (m-1-1) edge [thick, <->] node [left] {裏} (m-2-1)
+            edge [thick, <->] node [above] {逆} (m-1-2)
+            edge [thick, <->] (m-2-2)
+    (m-2-1) edge [thick, <->] node [below] {逆} (m-2-2)
+    (m-1-2) edge [thick, <->] node [right] {裏} (m-2-2)
+            edge [thick, <->] (m-2-1);
+
+\node {\colorbox{white}{対偶}} (0,0);
+\end{tikzpicture}
+
+\end{document}
