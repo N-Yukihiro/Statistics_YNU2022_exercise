@@ -1,0 +1,152 @@
+---
+title: "R演習2 - データのばらつき"
+output: html_notebook
+---
+
+### 四分位数
+
+四分位数及び最大値最小値はsummary()関数(前述)やquantile()関数を用いて求めることができる.
+quantile()関数もデータフレームを引数にとることはできない.
+
+quantile()関数の引数としてprobs =で0～1の値を与えれば, 指定した割合に該当する数値を返す.
+また, 四分位数の求め方にはいくつかの方法があるため, どの手法を選択するのかをtype = で指定できる.
+
+```{r}
+x <- 1:9
+quantile(x)
+quantile(iris$Sepal.Length)
+```
+
+### 箱ひげ図
+
+箱ひげ図を描画するには, geom_boxplot()を追加する.
+quantile()関数で, 0, .25, 0.5, 0.75 , 1に該当する値に赤線を重ねた.
+
+```{r}
+library(pacman)
+pacman::p_load(ggplot2)
+ggplot(iris) +
+  aes(x = Sepal.Length) +
+  geom_boxplot() +
+  geom_vline(xintercept = quantile(iris$Sepal.Length),
+             colour     = "red")
+```
+
+
+### 箱ひげ図と分布
+
+箱ひげ図にどの程度データが分布しているかを確認するにはgeom_jitter()を加える.
+fill = Speciesとして, 種目別に箱ひげ図を描画する.
+reshape2パッケージとscale_fill_brewer()関数を利用して塗りつぶす色を変更.
+
+```{r}
+ggplot(iris) +
+  aes(x    = Sepal.Length,
+      y    = Species,
+      fill = Species) +
+  geom_boxplot() +
+  geom_jitter() +
+  scale_fill_brewer(
+    palette = "Set2")
+```
+
+### 箱ひげ図とヴァイオリンプロット
+
+箱ひげ図とヴァイオリンプロットを重ねることで視覚的な情報量を増やすこともできる.
+scale_fill_manual()関数を利用して塗りつぶす色を指定.
+
+```{r}
+ggplot(iris) +
+  aes(x = Sepal.Length,
+      y = Species) +
+  geom_violin(aes(
+    fill = Species)) +
+  geom_boxplot(alpha = 0) +
+  geom_jitter() +
+  scale_fill_manual(
+    values = c("red", 
+               "blue",
+               "green"))
+```
+
+### 算術平均からの偏差の和
+
+算術平均からの偏差の和が0になることを検証する.
+数値計算上, 割り切れない場合はごく小さい値が算出されることもあることに注意.
+
+```{r}
+sum(x - mean(x))
+sum(iris$Sepal.Length - mean(iris$Sepal.Length))
+```
+
+### 標本分散
+
+標本分散を求めるために各データから平均を引いて2乗し, その平均を取る.
+Rにデフォルトで搭載されているvar()関数は標本分散ではない(以降扱う不偏分散($n$ではなく, $n-1$で除す)).
+
+```{r}
+mean((x - mean(x))^2)
+var(x)
+```
+
+### 標本標準偏差
+
+標本標準偏差を求めるために各データから平均を引いた値の平方平均の平方根を求める(標本分散の平方根を求める).
+Rにデフォルトで搭載されているsd()関数は標本標準偏差ではない(以降扱う不偏標準偏差(不偏分散の平方根)).
+
+```{r}
+seewave::rms(x - mean(x))
+sd(x)
+```
+
+### データの標準化
+
+データを標準化するにはscale()関数を利用する.
+出力結果は少し厄介.
+
+```{r}
+scale(x)
+```
+
+### 定義に従って標準化する
+
+データから平均を引き, 標準偏差を除す.
+scale()関数は不偏標準偏差で除していることがわかる.
+
+```{r}
+z1 <- (x - mean(x)) / seewave::rms(x - mean(x))
+z1
+z2 <- (x - mean(x)) / sd(x)
+z2
+```
+
+### 標準化変量の変換法の違い
+
+数値に若干の違いはあるが, 平均0, 分散1という性質は変わらない.
+
+```{r}
+mean(z1)
+seewave::rms(z1 - mean(z1))
+mean(z2)
+sd(z2)
+```
+
+### チェビシェフの不等式1
+
+チェビシェフの不等式をRで検証してみる.
+まず, データ等を設定し, 計算する
+
+```{r}
+x      <- iris$Sepal.Length
+size_x <- length(x)
+mean_x <- mean(x)
+sd_x   <- seewave::rms(x - mean_x)
+k      <- 2
+
+TF     <- ifelse(
+  abs(x - mean_x) - k * sd_x >=0,
+  1, 0)
+sum(TF) / size_x
+1 / k^2
+sum(TF) / size_x <= 1 / k^2
+```

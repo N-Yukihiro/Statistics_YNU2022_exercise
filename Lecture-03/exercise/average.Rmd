@@ -1,0 +1,148 @@
+---
+title: "R演習1 - 代表値"
+output: html_notebook
+---
+
+### 中央値
+
+中央値を算出する関数としてmedian()関数がある.
+データフレームから特定の列の中央値を知りたい場合はオブジェクト名$列名を引数に追加する.
+$演算子はオブジェクト内の列を操作したい場合によく利用される.
+
+```{r}
+x <- 1:9
+median(x)
+median(iris$Sepal.Length)
+```
+
+### 算術平均
+
+算術平均を算出する関数としてmean()関数がある.
+median()関数と同じくデータフレームを直接引数として取ることはできない.
+小数点以下の値を丸めるにはround()関数を利用する.
+第2引数で小数点以下何桁表示するかを与える.
+
+```{r}
+mean(x)
+mean(iris$Sepal.Length)
+round(mean(iris$Sepal.Length), 2)
+```
+
+### summary()関数を用いて求める
+
+summary()関数でも算術平均を知ることができる.
+summary()関数はベクトルでもデータフレームでも良い.
+
+```{r}
+summary(iris$Sepal.Length)
+summary(iris)
+```
+
+### 定義に従って算術平均を求める
+
+定義にしたがって自身で算術平均を求める.
+まず, sum()関数を用いて総和を求める.
+次に, length()関数を用いてデータの長さ(データサイズ$n$)を求める.
+総和をデータサイズで割ることで, 算術平均が得られる.
+
+```{r}
+sum.x  <- sum(x)
+size_x <- length(x)
+sum_x / size_x
+sum(iris$Sepal.Length) / length(iris$Sepal.Length)
+```
+
+### ヒストグラムに算術平均を加える
+
+ggplot2で縦線を加えるにはグラフにgeom_vline()を追加する.
+xinterceptでx軸のどこに線を引くのかを与える.
+ここでは, 算術平均を計算し, 与えている.
+線はlinetypeで指定できるため点線を指定し, colourで線の色を赤に指定した.
+
+```{r}
+library(pacman)
+pacman::p_load(ggplot2)
+ggplot(iris) +
+  aes(x = Sepal.Length) +
+  geom_histogram() +
+  geom_vline(xintercept = mean(iris$Sepal.Length),
+             linetype   = "dashed",
+             colour     = "red")
+```
+
+### 幾何平均
+
+幾何平均を求めるにはpsychパッケージのgeometric.mean()関数を利用する.
+
+```{r}
+# install.packages("psych")
+# library(psych)
+pacman::p_load(psych)
+psych::geometric.mean(x)
+psych::geometric.mean(iris$Sepal.Length)
+```
+
+### 定義に従って幾何平均を求める
+
+定義にしたがって自身で幾何平均を求める.
+まず, prod()関数を用いて総乗を求める.
+次に, length()関数を用いてデータの長さ(サイズ)を求める.
+総乗を$\frac{1}{\text{データサイズ}}$乗(冪乗根)することで, 幾何平均が得られる.
+
+```{r}
+prod(x)^(1/length(x))
+prod(iris$Sepal.Length)^(1 / length(iris$Sepal.Length))
+```
+
+### log()を用いて幾何平均を求める
+
+データを$e$を底とする対数に変換し, 算術平均を行い, 指数関数で戻すことでも幾何平均を得られる.
+底を2とした場合には, 対数の算術平均を指数として2に対して累乗する.
+
+```{r}
+exp(mean(log(x)))
+2^(mean(log2(x)))
+10^(mean(log10(iris$Sepal.Length)))
+```
+
+### 調和平均
+
+調和平均を求めるにはpsychパッケージのharmonic.mean()関数を利用する.
+
+```{r}
+psych::harmonic.mean(x)
+psych::harmonic.mean(iris$Sepal.Length)
+```
+
+### 定義に従って調和平均を求める
+
+定義にしたがって自身で調和平均を求める.
+まず, ^(-1)とsum()関数を用いて逆数の総和を求める.
+総和をデータサイズで除し, 更に逆数を求めることで調和平均が得られる.
+
+```{r}
+((sum(x^(-1)))/length(x))^(-1)
+mean(iris$Sepal.Length^(-1))^(-1)
+```
+
+### 平方平均
+
+平方平均を求めるにはseewaveパッケージのrms()関数を利用する.
+
+```{r}
+# install.packages("seewave")
+# library(seewave)
+pacman::p_load(seewave)
+seewave::rms(x)
+seewave::rms(iris$Sepal.Length)
+```
+
+### 定義に従って平方平均を求める
+
+定義にしたがって自身で平方平均を求める
+データを2乗し, 平方根を取ることで, 平方平均を得られる
+
+```{r}
+sqrt(mean(x^2))
+sqrt(mean(iris$Sepal.Length^2))
+```
