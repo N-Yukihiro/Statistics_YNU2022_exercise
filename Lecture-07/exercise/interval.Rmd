@@ -1,0 +1,112 @@
+---
+title: "信頼区間"
+output: html_notebook
+---
+
+### 利用するデータ
+
+今回も`ggplot2`パッケージの`diamonds`データを利用する.
+
+```{r}
+library(pacman)
+p_load(ggplot2)
+str(diamonds)
+```
+
+### データ内の分散・標準偏差を求める
+
+今回も`diamonds`データを母集団とみなすので, データの標本分散を求め, 母分散とみなす.
+列は`price`を利用する.
+後で利用するために母平均もオブジェクトに格納する.
+    
+```{r}
+var_pop  <- mean((diamonds$price)^2) - mean(diamonds$price)^2
+var_pop
+sd_pop   <- sqrt(var_pop)
+sd_pop
+mean_pop <- mean(diamonds$price)
+mean_pop
+```
+
+### データの無作為抽出
+
+サイズ100のサンプルを5000個(サンプル数5000)作成する.
+`withr::with_seed()`関数で乱数の種を指定し, 結果を再現できるようにする.
+`purrr::rerun()`関数で繰り返し処理を行う.
+
+```{r}
+p_load(withr, purrr, dplyr)
+## msはmulti samplesの略
+ms <- with_seed(27182,
+                rerun(.n = 1000,
+                      slice_sample(diamonds,
+                                   n       = 100,
+                                   replace = FALSE)))
+```
+
+### 各サンプルの平均と95%信頼区間を計算する
+
+`map_dfr()`関数を利用して, 各サンプルの平均と95%信頼区間を計算し, データフレームへ変換する.
+`.id = **`を指定することで, `rerun()`関数で作成したリストの各リストの名前を`**`という名前の列に追加する.
+ここでは各リストに通し番号が振られているので, 通し番号を`number`という列に格納している.
+
+```{r}
+ms_ci <- map_dfr(
+  ms,
+  summarise,
+  lowerCI = mean(price) + 
+    qnorm(0.025) * sqrt(var_pop / length(price)),
+  mean    = mean(price),
+  upperCI = mean(price) + 
+    qnorm(0.975) * sqrt(var_pop / length(price)),
+    .id   = "number")
+```
+
+### 信頼区間とパラメーター
+
+信頼区間にパラメーターが含まれるかどうかを1か0かで判定する.
+
+データフレームで列を操作する(新しい列を作る, 列の中身を変更するetc...)場合には, `dplyr`パッケージの`mutate()`関数を利用する.
+第1引数に利用するデータフレーム, 第2引数に`** =`の`**`で列の名前を指定し, `=`の後で操作方法を指定する.
+
+ここでは, さらに`dplyr`パッケージの`if_else()`関数を利用して, 信頼区間の下限より大きく, 上限より小さい場合に1, そうでない場合に0を格納するように指示している.
+
+```{r}
+ci_TF <- dplyr::mutate(ms_ci, 
+                       TF = if_else(
+                         lowerCI   <= mean_pop &
+                           upperCI >= mean_pop, 
+                         1L, 0L))
+```
+
+### 信頼区間にパラメーターが含まれる割合
+
+先程作成した, TFの平均を計算する.
+この平均は信頼区間にパラメーターが含まれる割合である.
+実際に95%に近い値が算出されている.
+
+```{r}
+summarise(ci_TF, mean(TF))
+```
+
+### 
+
+標本をすべて表示するのは多すぎるので, 先頭の100標本だけ表示する.
+`geom_errobar()`関数は信頼区間などを示す際に利用できる.
+`aes()`内で下限を`ymin`で, 上限を`ymax`で与える.
+
+```{r}
+ggplot(data  = head(ci_TF, 100)) +
+  aes(x      = number, 
+      y      = mean,
+      colour = TF) +
+  geom_point() +
+  geom_errorbar(
+    aes(ymin = lowerCI,
+        ymax = upperCI), 
+    width = .2) +
+  geom_hline(
+    yintercept = mean_pop, 
+    linetype   = "dashed", 
+    colour     = "black")
+```
