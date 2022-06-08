@@ -1,0 +1,306 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+### 利用するデータ
+
+今回はRにデフォルトで格納されているsleepというデータセットを利用する.
+
+10人の患者に対して薬を投与して, 睡眠時間を計測したデータ.
+2種類の薬を投与してその結果を比較している.
+本来は対応のある2群の検定用のデータであるが, 便宜上対応のない2群の検定にも利用する.
+
+```{r}
+names(sleep)
+```
+
+### データの構造
+
+データを利用する前にデータの構造をstr()関数で把握する.
+extra列に睡眠時間の増減が, group列に投与した薬が, IDに患者のIDが振られている.
+
+```{r}
+str(sleep)
+```
+
+### データの前処理
+
+今回は薬1をコントロール群, 薬2をトリートメント群とする.
+
+効果量の計算上, コントロール群を1, トリートメント群を2にgroupの値を修正する.
+
+列の操作をするために, dplyr::mutate()関数を利用する.
+第2引数と第3引数で同じ列名を指定した場合には, 第2引数で変換した結果をさらに第3引数で扱うことができる.
+
+後の説明のために, xとyというオブジェクトにdplyr::filterを利用して, groupが1である行と2である行をそれぞれ選択して格納している.
+
+```{r}
+library(pacman)
+p_load(dplyr)
+sleep <- mutate(sleep,
+                group = as.numeric(group),
+                group = 2 - group,
+                group = as.factor(group))
+x <- dplyr::filter(sleep, group == 0)
+y <- dplyr::filter(sleep, group == 1)
+```
+
+
+### データの記述統計量を確認
+
+データの記述統計量を確認するには, summary()関数を利用する
+
+```{r}
+summary(sleep)
+```
+
+
+### データの描画
+
+2群を比較する際には箱ひげ図を描くのがわかりやすい.
+差があるデータのように見える.
+
+```{r}
+p_load(ggplot2)
+ggplot(data = sleep) +
+  aes(x    = group, 
+      y    = extra, 
+      fill = group) +
+  geom_boxplot()
+```
+
+###
+
+対応のあるデータの場合にはポイント同士を線で結んでも差がわかりやすい.
+同じユニット同士を線で結ぶには, geom_line()関数の中でaes(group = ID)を指定する.
+
+```{r}
+ggplot(data = sleep) +
+  aes(x      = group, 
+      y      = extra, 
+      colour = group) +
+  geom_point() +
+  geom_line(aes(group = ID),
+            colour = "lightgray")
+```
+
+### 平均値と比較値との差のz検定
+
+z検定を行うためには, BDSAパッケージのz.test()関数を利用
+引数のxに検定したいデータ(ベクトル), muに比較値, sigma.xに標準偏差を指定する.
+
+sigma.xは母分散が未知で大標本の場合にも必要
+
+```{r}
+p_load(BSDA)
+BSDA::z.test(x$extra,
+             mu          = 10,
+             sigma.x     = sd(x$extra), 
+             alternative = "two.sided", 
+             conf.level  = 0.95)
+```
+
+### 結果の読み方
+
+まず, One-sample z-Testと1標本に対して, z検定が行われたことが示される.
+data:に分析に利用したデータが示される.
+ここではxというオブジェクト.
+
+3行目にz =でz値が, p-valueにp値が示されている.
+そして, alternative hypothesis: true mean is not equal to 10と対立仮説は母平均が帰無仮説である10と一致しないことであったことが示される.
+
+95 percent confidence intervalにデータの95%信頼区間が示される.
+
+### 帰無仮説が受容される場合
+
+比較値に平均を入れるとz値やp値, 帰無仮説の値が変化する.
+それ以外は変化しない.
+
+```{r}
+z.test(x$extra, 
+       mu          = mean(x$extra), 
+       sigma.x     = sd(x$extra), 
+       alternative = "two.sided", 
+       conf.level  = 0.95)
+```
+
+### 平均値と比較値との差のt検定
+
+t検定を行うためには, デフォルトで格納されている(正確にはstatsパッケージ)t.test()関数を利用する.
+引数のxに検定したいデータ(ベクトル), muに比較値を指定する.
+
+z.test()関数と異なり, 標準偏差は自動では計算してくれる.
+結果の読み方はt.test()関数と同じ.
+
+```{r}
+t.test(x           = x$extra,
+       mu          = 0, 
+       alternative = "two.sided", 
+       conf.level  = 0.95)
+```
+
+### 対応のない平均値の差のt検定(等分散)
+
+対応がなく, 等分散なデータにおける平均値の差のt検定を行うには, t.test()関数の中で, paired = FALSE, var.equal = TRUEを指定する.
+オブジェクトを分けずとも検定を実行できる.
+formula =における~の前に検定を行いたい列, ~の後に群を示す列を指定する.
+dataという引数で利用するデータセットを指定する.
+
+
+```{r}
+t.test(extra ~ group, 
+       data        = sleep, 
+       paired      = FALSE,
+       var.equal   = TRUE,
+       alternative = "two.sided",
+       conf.level  = 0.95)
+```
+
+### 対応のない平均値の差のt検定(非等分散)
+
+対応がなく, 等分散でないデータにおける平均値の差のt検定を行うには, t.test()関数の中で, paired = FALSE, var.equal = FALSEを指定する.
+
+
+```{r}
+t.test(extra ~ group, 
+       data        = sleep, 
+       paired      = FALSE,
+       var.equal   = FALSE,
+       alternative = "two.sided",
+       conf.level  = 0.95)
+```
+
+### 対応のない2群のHedgesのd
+
+効果量を計算するためにはいくつかパッケージがあるが, 今回はeffectsizeパッケージを利用する.
+
+Hedgesのdを計算するには, choens_d()関数を利用する.
+paired = FALSEで対応のない2群の分析ができる.
+
+```{r}
+p_load(effectsize)
+effectsize::cohens_d(extra ~ group,
+                     data   = sleep,
+                     paired = FALSE)
+```
+
+### 対応のない2群のHedgesのg
+
+- Hedgesのdからバイアスを補正するために, 補正係数$(1 - \frac{3}{4(n_x + n_y) - 9} )$をかけたHedgesのgを計算するには, hedges_g()関数を利用する.
+
+```{r}
+hedges_g(extra ~ group, 
+         data   = sleep,
+         paired = FALSE)
+```
+
+### 対応のない2群のGlassの$\Delta$
+
+Glassの$\Delta$を利用するには, glass_delta()関数を利用する.
+
+```{r}
+glass_delta(extra ~ group, 
+            data = sleep)
+```
+
+### 対応のある平均値の差のt検定
+
+対応があるデータにおける平均値の差のt検定を行うには, t.test()関数の中で, paired = TRUEを指定する.
+
+```{r}
+t.test(extra ~ group,
+       data        = sleep, 
+       paired      = TRUE,
+       alternative = "two.sided",
+       conf.level  = 0.95)
+```
+
+### 対応のある2群の効果量
+
+対応のある2群の効果量を計算するには, cohens_d()関数の引数でpaired = TRUEを指定する.
+
+```{r}
+cohens_d(extra ~ group, 
+         data   = sleep, 
+         paired = TRUE)
+```
+
+### 母比率と比較値の差の$z$検定(両側検定)
+
+母比率と比較値の差の$z$検定を行うためには, BSDAパッケージのz.test()関数を利用する
+
+受験者8920人のうち470人合格するのは, 6.79%と異なるかを検定する
+
+信頼区間が一致しないのは検証中
+
+```{r}
+female <- c(rep(0, 8450),
+            rep(1, 470))
+BSDA::z.test(x           = female, 
+             mu          = 0.0679, 
+             sigma.x     = sqrt(0.0679 * (1 - 0.0679)),
+             alternative = "two.sided",
+             conf.level  = .99)
+```
+
+
+### 母比率と比較値の差の$z$検定(片側検定)
+
+片側検定を行うには, `alternative`の引数で`"less"` もしくは `"greater"`を指定する
+
+```{r}
+z.test(x           = female, 
+       mu          = 6.79, 
+       sigma.x     = sqrt(mean(female) * (1 - mean(female))),
+       alternative = "less",
+       conf.level  = .99)
+```
+
+### 適合度の$\chi^2$検定
+
+適合度の$\chi^2$検定を行うには, `chisq.test()`関数を利用する
+
+```{r}
+chisq.test (x = c(470,    8450), 
+            p = c(0.0679, (1 - 0.0679)))
+```
+
+
+### 母比率と比較値の差の$F$検定
+
+母比率と比較値の差の$F$検定を行うには, `exactci`パッケージの`binom.exact()`関数を利用する
+tsmethod = "central"を指定することで, Clopper and Pearsonの方法でp値と信頼区間を算出する
+Rにデフォルトで格納されているbinom.test()関数は$p$値の計算方法と95%信頼区間の計算方法が異なるので利用しない
+
+```{r}
+p_load(exactci)
+exactci::binom.exact(x           = 470, 
+                     n           = 8920,
+                     p           = 0.0679,
+                     alternative = "two.sided",
+                     tsmethod    = "central", 
+                     conf.level  = .99)
+```
+
+### 対応のないデータにおける母比率の差のフィッシャーの正確検定
+
+対応のないデータにおける母比率の差のフィッシャーの正確検定を行うには, exact2x2パッケージのfisher.exact()関数を利用する
+第1引数に検定をしたいクロス集計表を行列で与える
+
+```{r}
+p_load(exact2x2)
+Pass <- matrix(c(15, 5, 85, 60),
+               nrow = 2)
+fisher.exact(x           = Pass,
+             alternative = "greater",
+             tsmethod    = "minlike")
+```
+
+### 対応のないデータにおける独立性の$\chi^2$検定
+
+対応のないデータにおける母比率の差のフィッシャーの正確検定を行うには, chisq.test()関数を利用する
+
+```{r}
+chisq.test(Pass, correct = FALSE)
+```
