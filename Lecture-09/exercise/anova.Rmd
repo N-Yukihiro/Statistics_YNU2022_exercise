@@ -1,0 +1,95 @@
+---
+title: "分散分析"
+output: html_notebook
+---
+
+# R演習
+
+### 利用するデータ
+
+投票の呼びかけを行うことで投票率が変化するのかを検証したGerber, Green, and Larimer (2008)のデータを用いる
+
+```{r}
+library(pacman)
+p_load_gh("kosukeimai/qss-package")
+data("social", package = "qss")
+```
+
+### データの構造
+
+`str()`関数を用いてデータの概要を把握する
+
+```{r}
+str(social)
+```
+
+### データの変換
+
+分析を行いやすいように`mutate()`関数を用いて文字列を因子型に変換する
+
+```{r}
+p_load(dplyr)
+data <- mutate(social,
+               across(where(is.character),
+                      as.factor))
+```
+
+### データ構造のチェック
+
+きちんと変換されたのかを再び確認する
+
+```{r}
+str(data)
+```
+
+### データの概要
+
+`summary()`関数を用いてデータの概要を把握する
+
+```{r}
+summary(data)
+```
+
+### メッセージ別の投票率を確認
+
+メッセージ別に投票率を計算する
+またコントロールグループとの比較も行う
+
+```{r}
+summarise(group_by(data, messages),
+          mean(primary2006))
+
+control <- summarise(dplyr::filter(data,
+                                   messages == "Control"),
+                     mean(primary2006))
+
+summarise(group_by(data, messages),
+          mean(primary2006) - control)
+```
+
+### メッセージの効果を一元配置分散分析にて検証する
+
+分散分析をするために`aov()`関数を利用する
+
+```{r}
+summary(aov(primary2006 ~ messages, 
+            data = data))
+```
+
+### メッセージと年齢の効果を二元配置分散分析にて検証する
+
+メッセージと年齢の効果(主効果のみ)を二元配置分散分析にて検証する
+
+```{r}
+summary(aov(primary2006 ~ messages + sex, 
+            data = data))
+```
+
+### メッセージと年齢の効果を二元配置分散分析にて検証する
+
+メッセージと年齢の効果(交互作用含)を二元配置分散分析にて検証する
+
+```{r}
+summary(aov(primary2006 ~ messages * sex, 
+            data = data))
+```
