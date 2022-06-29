@@ -1,0 +1,117 @@
+---
+title: "相関関係"
+output: html_notebook
+---
+
+### 演習に利用するデータ
+
+本日もRにデフォルトで入っているirisのデータを利用する.
+
+```{r}
+str(iris)
+```
+
+### 散布図
+
+散布図を書くためには, geom_point()関数を利用する.
+
+```{r}
+library(pacman)
+p_load(ggplot2)
+ggplot(data = iris) +
+  aes(x = Petal.Length, 
+      y = Petal.Width) +
+  geom_point()
+```
+
+### 層別に散布図の色を分ける1
+
+層別に色を分けて散布図を書くためには, aes(colour = group name)を指定する.
+
+```{r}
+ggplot(data = iris) +
+  aes(x      = Petal.Length, 
+      y      = Petal.Width,
+      colour = Species) +
+  geom_point()
+```
+
+### 層別に散布図を描画する
+
+層別に散布図を描画するには, facet_wrap(~ group name)関数を利用する.
+
+scales = "free"で, グループごとにx軸とy軸を調整してくれる.
+aes(colour = group name)を残せばグループ別に色を分けてくれる.
+
+```{r}
+ggplot(data = iris) +
+  aes(x = Petal.Length, 
+      y = Petal.Width) +
+  geom_point() +
+  facet_wrap(~ Species, 
+             scales = "free")
+```
+
+### ピアソンの積率相関係数の算出
+
+ピアソンの積率相関係数を算出するためには, cor.test()関数を利用する.
+
+```{r}
+cor.test(x      = iris$Petal.Length,
+         y      = iris$Petal.Width,
+         method = "pearson")
+```
+
+### スピアマンの順位相関係数の算出
+
+スピアマンの順位相関係数を算出するためには, 引数にmethod = "spearman"を追加する.
+
+```{r}
+cor.test(x      = iris$Petal.Length,
+         y      = iris$Petal.Width,
+         method = "spearman")
+```
+
+### ペアプロット
+
+いくつかの変数をまとめて散布図を描くには, GGallyパッケージのggpairs()関数が便利.
+
+右上(upper)にはピアソンの積率相関係数を示し, 対角線(diag)には密度などを表してくれる.
+
+```{r}
+p_load(GGally)
+ggpairs(iris)
+```
+
+### グループ別に色分けしたペアプロット
+
+グループ別に色分けしたり, グループ別相関係数を算出したりする場合には, aes(colour = group name)を引数に追加する.
+
+```{r pair2, echo=TRUE, eval=FALSE}
+ggpairs(iris, 
+        aes(colour = Species))
+```
+
+### まとめて検定
+
+相関係数をまとめて算出し, かつ検定も行うにはpsychパッケージのcorr.test()関数が便利.
+
+ただし, 因子(factor)や文字列(character)がデータにあるとエラーになるので注意.
+
+```{r}
+p_load(psych, dplyr)
+iris_2 <- dplyr::select(iris, -Species)
+psych::corr.test(iris_2, method="pearson")
+```
+
+### 偏相関
+
+偏相関係数を算出するには, psychパッケージのpartial.r()関数を利用する.
+
+第1引数でデータを, 第2引数で偏相関係数を算出したい2変数の列番号を, 第3引数で影響を除きたい変数の列番号をc()で囲って指定する.
+
+ここでは, Sepal.Lengthの影響を取り除いたPetal.LengthとPetal.Widthの偏相関係数を算出している.
+
+```{r}
+psych::partial.r(data = iris, c(3, 4), c(1))
+```
