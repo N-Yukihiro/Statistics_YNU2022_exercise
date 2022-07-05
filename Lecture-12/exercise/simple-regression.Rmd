@@ -1,0 +1,204 @@
+---
+title: "最小二乗法"
+output: html_notebook
+---
+
+### 利用するデータ
+
+本日利用するデータは`wooldridge`パッケージに入っている`saving`データ.
+貯蓄(`sav`)を応答変数に収入(`inc`)や教育年数(`educ`)を説明変数とする.
+
+```{r}
+library(pacman)
+p_load(dplyr, wooldridge)
+dat <- select(saving,
+              sav, inc, educ)
+str(dat)
+```
+
+###
+
+利用する3変数でペアプロットをする
+
+```{r}
+p_load(ggplot2, GGally)
+ggpairs(dat)
+```
+
+### 単回帰分析
+
+最小二乗法を用いて単回帰分析を行うためには, lm()関数を利用する.
+
+第1引数に分析のモデルを指定する.
+~の前に応答変数を, ~の後に説明変数を指定する.
+    
+```{r}
+ols1 <- lm(sav ~ inc, data = dat)
+```
+
+### 結果の示し方
+
+結果はjtoolsパッケージのsumm()関数が便利.
+
+```{r}
+p_load(jtools)
+jtools::summ(ols1)
+```
+
+### 結果の読み方
+
+MODEL INFOにモデルの内容が記述される.
+Observationsにサンプルサイズが, Dependent Variableに応答変数が, Typeに分析方法が示される.
+今回はサンプルサイズ32で, 応答変数はsav, 分析方法は最小二乗法(OLS)であることが示される.
+
+MODEL FITに分析の結果が記述される.
+回帰式の適合度検定のF値がまず示され, p値が計算されている.
+次に決定係数$R^2$の値が示され, その下に自由度調整済み決定係数$adj. R^2$が示されるが, 単回帰分析の場合には, $R^2$の値を見れば良い.
+
+最後の表に分析の結果が示される.
+(Intercept)に定数項が, その後に説明変数が示される.
+Est. の列に回帰係数が, S.E. に標準誤差が示される.
+t val.にt値が示され, pにp値が示される.
+
+### 回帰係数の95%信頼区間を表示
+
+回帰係数の95%信頼区間を表示するには, summ(confint = TRUE)を指定する.
+
+```{r}
+summ(ols1, confint = TRUE)
+```
+
+### 標準回帰係数の算出
+
+標準回帰係数を算出するには, scale_mod(scale.response = TRUE)を利用する.
+
+```{r}
+summ(scale_mod(ols1,
+               scale.response = TRUE))
+```
+
+### 散布図と回帰直線
+
+散布図に回帰直線を引きたい場合には, geom_smooth()関数を利用する.
+
+```{r}
+ggplot(data = dat) +
+  aes(x = inc, 
+      y = sav) +
+  geom_point() +
+  geom_smooth(method = "lm", 
+              se     = FALSE)
+```
+### 結果を論文に掲載する
+
+結果を論文に掲載できるようにきれいに整形するにはstargazerパッケージを利用するのが便利
+様々な引数があるので, 使いこなすにはHELPを参照
+star.cutoffs = NA, omit.table.layout = "n"は忘れない
+分析がしたいのであって, 天体観測がしたいわけではないことに注意
+
+```{r}
+p_load(stargazer)
+stargazer::stargazer(ols1,
+                     type              = "text",
+                     style             = "all", 
+                     ci                = TRUE,
+                     star.cutoffs      = NA, 
+                     omit.table.layout = 'n',
+                     align             = TRUE)
+```
+
+### 予測(新しい説明変数のデータセットを作成)
+
+データを予測するため, まずは新しい説明変数のデータセットを作成する.
+データの列名は分析に利用したものと同じ名前, 同じ列数である必要性がある.
+
+```{r}
+new_dat <- data.frame(
+  inc = seq(from        = min(dat$inc),
+             to         = max(dat$inc),
+             length.out = 100)
+)
+```
+
+### 予測
+
+データを予測するためには, `predict()`関数を利用する.
+第1引数に回帰分析の結果のオブジェクト, `newdata`に新しい説明変数のデータフレーム, `interval`に求めたい区間, `level`に$100(1 - \alpha)\%$区間の値を指定する.
+`interval = "confidence"`で信頼区間が, `interval = "prediction"`で予測区間が求められる.
+
+```{r}
+ci <- predict(ols1, 
+              newdata  = new_dat, 
+              interval = "confidence",
+              level    = 0.95)
+ci <- bind_cols(new_dat, ci)
+pred <- predict(ols1, 
+                newdata  = new_dat, 
+                interval = "prediction",
+                level    = 0.95)
+pred <- bind_cols(new_dat, pred)
+```
+
+### 予測区間の図示
+
+データの散布図に予測区間を図示する.
+
+```{r}
+ggplot() +
+  aes(x = inc) +
+  geom_point(
+    data  = dat,
+    aes(y = sav)) +
+  geom_smooth(
+    data   = dat,
+    aes(y  = sav),
+    method = "lm",
+    se     = FALSE) +
+  geom_ribbon(
+    data     = pred,
+    aes(ymin = lwr,
+        ymax = upr),
+    fill     = "lightblue",
+    alpha    = 0.5
+  )
+```
+
+### `geom_smooth()`と区間
+
+`geom_smooth()`関数を利用するとデフォルトでは回帰直線とともに, 区間が表示されている.
+これは回帰直線の信頼区間.
+
+```{r}
+ggplot(data = dat) +
+  aes(x = inc,
+      y = sav) +
+  geom_point() +
+  geom_smooth(
+    method = "lm"
+  )
+```
+
+### 回帰直線の信頼区間
+
+`interval = "confidence"`で推定した値と`geom_smooth(se = TRUE)`は一致する.
+
+```{r}
+ggplot() +
+  aes(x = inc) +
+  geom_point(
+    data  = dat,
+    aes(y = sav)) +
+  geom_smooth(
+    data   = dat,
+    aes(y  = sav),
+    method = "lm",
+    se     = TRUE) +
+  geom_ribbon(
+    data     = ci,
+    aes(ymin = lwr,
+        ymax = upr),
+    fill     = "lightblue",
+    alpha    = 0.5
+  )
+```
+
