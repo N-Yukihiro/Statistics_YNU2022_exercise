@@ -1,0 +1,217 @@
+---
+title: "重回帰分析(最小二乗法)"
+output: html_notebook
+---
+
+### 利用するデータ
+
+本日利用するデータは`wooldridge`パッケージに入っている`saving`データ.
+貯蓄(`sav`)を応答変数に収入(`inc`)や教育年数(`educ`)を説明変数とする.
+
+```{r}
+library(pacman)
+p_load(dplyr, wooldridge)
+dat <- select(saving,
+              sav, inc, educ)
+str(dat)
+```
+
+###
+
+利用する3変数でペアプロットをする
+
+```{r}
+p_load(ggplot2, GGally)
+ggpairs(dat)
+```
+
+### 単回帰分析
+
+- 比較のためにまず前回行った単回帰分析を行う
+    
+```{r}
+ols1 <- lm(sav ~ inc, data = dat)
+```
+
+### 重回帰分析
+
+重回帰分析を行うには, 分析モデルで説明変数を`+`でつなぐ
+
+```{r}
+ols2 <- lm(sav ~ inc + educ, data = dat)
+```
+
+データフレーム内にある応答変数以外のすべての変数を説明変数とする際には, ` ~ .`と書くこともできる
+
+```{r}
+ols3 <- lm(sav ~ ., data = dat)
+```
+
+### 重回帰分析の結果の表示
+
+```{r}
+p_load(jtools)
+summ(ols2)
+```
+
+### 結果を論文に掲載する
+
+結果を論文に掲載できるようにきれいに整形するにはstargazerパッケージを利用するのが便利
+様々な引数があるので, 使いこなすにはHELPを参照
+star.cutoffs = NA, omit.table.layout = "n"は忘れない
+    分析がしたいのであって, 天体観測がしたいわけではないことに注意
+
+```{r}
+p_load(stargazer)
+stargazer::stargazer(ols2,
+                     type              = "text",
+                     style             = "all", 
+                     ci                = TRUE,
+                     star.cutoffs      = NA, 
+                     omit.table.layout = 'n',
+                     align             = TRUE)
+```
+
+### 複数の分析結果を並べる
+
+複数の分析結果を並べるのにもstargazer`は有用
+
+```{r}
+stargazer(ols1, ols2,
+          type              = "text",
+          style             = "all", 
+          ci                = TRUE,
+          star.cutoffs      = NA, 
+          omit.table.layout = 'n',
+          align             = TRUE)
+```
+
+### 結果の図示
+
+回帰分析の結果は表だけでなく, グラフ化するとわかりやすい
+結果のグラフ化にはcoefplotパッケージのcoefplot()関数が便利
+
+```{r}
+p_load(coefplot)
+coefplot(ols2)
+```
+
+### 結果の図示2
+
+定数項は基準が違うために一緒にプロットすると見づらい場合がある
+intercept = FALSEを引数に入れれば定数項を表示しない
+
+```{r}
+coefplot(ols2,
+         intercept = FALSE)
+```
+
+### 複数のモデルを比較
+
+複数のモデルをグラフを用いて比較するには, coefplotパッケージのmultiplot()関数が便利
+
+```{r}
+multiplot(ols1, ols2,
+          intercept = FALSE)
+```
+
+### 標準回帰係数のプロット
+
+標準回帰係数へはarmパッケージのstandardize(standardize.y = TRUE)で変換できる
+
+```{r}
+p_load(arm)
+coefplot(
+  arm::standardize(ols2,
+                   standardize.y = TRUE))
+```
+
+### 標準回帰係数のマルチプロット
+
+標準回帰係数へはarmパッケージのstandardize(standardize.y = TRUE)で変換すれば, マルチプロットもできる
+
+```{r}
+multiplot(
+  arm::standardize(ols1,
+                   standardize.y = TRUE),
+  arm::standardize(ols2,
+                   standardize.y = TRUE),
+  names = c("model1", "model2"))
+```
+.
+### LOOCVの計算
+
+`caret`パッケージを利用してLOOCVを求める.
+
+```{r}
+p_load(caret)
+model <- train(sav ~ inc, 
+               data      = dat,
+               method    = "lm", 
+               trControl = trainControl(method = "LOOCV"))
+model
+```
+
+### 残差と予測値のプロット
+
+残差プロットをするためには, `ggfortify`パッケージと`autoplot()`関数を利用するのが便利
+x軸が予測値, y軸が残差
+
+```{r}
+p_load(ggfortify)
+autoplot(ols2, 
+         which = 1, 
+         ncol  = 1)
+```
+
+### 残差の平方根プロット
+
+残差の変動を確認するため, x軸が予測値, y軸が標準化した残差の絶対値の平和根の散布図を描く
+
+```{r}
+autoplot(ols2, 
+         which = 3, 
+         ncol  = 1)
+```
+
+### 残差の正規Q-Qプロット
+
+残差の正規Q-Qプロットで直線状に標準化した残差が乗っているかチェックする
+
+```{r}
+autoplot(ols2, 
+         which = 2,
+         ncol  = 1)
+```
+
+### 標準化残差とてこ比のプロット
+
+x軸にてこ比, y軸に標準化残差を描画する
+
+```{r}
+autoplot(ols2,
+         which = 5,
+         ncol  = 1)
+```
+
+### てこ比とCookの距離のプロット
+
+x軸にてこ比, y軸にCookの距離を設定し, 散布図を描く
+
+```{r}
+autoplot(ols2, 
+         which = 6, 
+         ncol  = 1)
+```
+
+### 多重共線性のチェック
+
+多重共線性のチェックのため, VIFを計算する
+VIFの計算には, carパッケージのvif()関数を利用する
+VIFが10以下であれば問題ない
+    2以下が理想だとする意見もある
+
+```{r}
+p_load(car)
+car::vif(ols2)
+```
