@@ -1,0 +1,241 @@
+---
+title: "最尤推定法"
+output: html_notebook
+---
+
+### 利用するデータ
+
+Angrist et al.(2002)の論文の結果(特にtable 3 及び table 4)を再現する
+コロンビアの私立学校(日本の中高に相当する学校)に通うための割引券を応募者の中からランダムに配布する実験の結果
+
+```{r}
+library(pacman)
+p_load_gh("itamarcaspi/experimentdatar")
+data(vouchers)
+```
+
+experimentdatar`パッケージのインストールができない方はこちらを実行
+```{r}
+url <- "http://github.com/itamarcaspi/experimentdatar/raw/master/data/vouchers.rda"
+download.file(url      = url,
+              destfile = "vouchers.rda")
+load("vouchers.rda")
+```
+
+
+### データの抽出
+
+このデータにはいくつかの実験のデータが集約されているため, 必要な行を抽出する
+列数も多いため, 分析に利用する応答変数, 説明変数, コントロール変数のみ残す
+
+```{r}
+p_load(dplyr)
+dat <- dplyr::filter(vouchers,
+                     TAB3SMPL == 1,
+                     BOG95SMP == 1) |> 
+  dplyr::select(PRSCH_C, USNGSCH,PRSCHA_1, FINISH6:FINISH8,
+                REPT6, REPT, NREPT,
+                VOUCH0, # 説明変数
+                SVY, HSVISIT, DMONTH1:DMONTH12,
+                AGE, SEX2, STRATA1:STRATA6, STRATAMS)
+```
+
+### データの要約
+
+`summary()`関数を利用してデータの記述統計量を把握する
+
+```{r}
+summary(dat)
+```
+
+### モデルの作成
+
+コントロール変数が多いため, 事前にモデルを作成しておく
+    応答変数は私立学校で6年生をスタートしたか
+    説明変数は割引券に当選したかどうか
+    コントロール変数は電話や対面による調査の有無, 調査が行われた月, 調査時の学生の年齢, 性別, 親の社会的地位
+
+```{r}
+No_controls <- "PRSCHA_1 ~ VOUCH0"
+controls <- "PRSCHA_1 ~ VOUCH0 + 
+       SVY + HSVISIT + 
+       DMONTH1 + DMONTH2 + DMONTH3 +
+       DMONTH4 + DMONTH5 + DMONTH6 + DMONTH7 + DMONTH8 +
+       DMONTH9 + DMONTH10 + DMONTH11 + DMONTH12 +
+       AGE + SEX2 +
+       STRATA1 + STRATA2 + STRATA3 +
+       STRATA4 + STRATA5 + STRATA6 + STRATAMS"
+```
+
+### 最尤推定
+
+最尤推定法を利用するには, `glm()`関数を利用する
+    確率密度関数の分布族として正規分布(ガウス分布)を利用することを`family = "gaussian"`で宣言する
+
+```{r}
+ml1 <- glm(No_controls, family = "gaussian", 
+           data = dat)
+ml2 <- glm(controls,    family = "gaussian", 
+           data = dat)
+```
+
+### 結果の確認(ml1)
+
+`ml1`の結果を`jtools::summ()`関数で確認する
+    割引券をもらっても約$6\%$しか私立学校への進学率が変わらない
+    定数項を見るとチケットが当たらなくても約$88\%$の生徒が進学している
+    割引券に応募した生徒の中では, 割引券の有無によって進学率に当てる影響は小さい
+
+```{r}
+p_load(jtools)
+summ(ml1)
+```
+
+### 結果の確認(ml1及びml2)
+
+複数の結果を確認するためには, `stargazer::stargazer()`関数を利用する
+
+```{r}
+p_load(stargazer)
+stargazer(ml1, ml2,
+          type              = "text",
+          style             = "all", 
+          ci                = TRUE,
+          star.cutoffs      = NA, 
+          omit.table.layout = 'n',
+          align             = TRUE)
+```
+
+###
+
+説明変数の回帰係数を並べてプロットする
+必要な回帰係数のみを抽出する場合は, `coefficients`を引数で指定する
+
+```{r}
+p_load(coefplot)
+multiplot(ml1, ml2,
+          coefficients = "VOUCH0")
+```
+
+### 退学率に関する分析
+
+割引券当選から3年後の調査日現在に私立学校に在籍している生徒を応答変数として分析する
+
+```{r}
+No_controls2 <- "PRSCH_C ~ VOUCH0"
+controls2 <- "PRSCH_C ~ VOUCH0 + 
+       SVY + HSVISIT + 
+       DMONTH1 + DMONTH2 + DMONTH3 +
+       DMONTH4 + DMONTH5 + DMONTH6 + DMONTH7 + DMONTH8 +
+       DMONTH9 + DMONTH10 + DMONTH11 + DMONTH12 +
+       AGE + SEX2 +
+       STRATA1 + STRATA2 + STRATA3 +
+       STRATA4 + STRATA5 + STRATA6 + STRATAMS"
+ml3 <- glm(No_controls2, family = "gaussian", 
+           data = dat)
+ml4 <- glm(controls2,    family = "gaussian", 
+           data = dat)
+```
+
+### 回帰係数の図示
+
+割引券によって在籍し続ける(退学しない)ことに対する効果は一定程度認められることがわかる
+
+```{r}
+multiplot(ml3, ml4,
+          coefficients = "VOUCH0")
+```
+
+
+### 様々な応答変数をまとめて分析する
+
+様々な応答変数を分析の対象とし, 探索的に説明変数の効果を検証する方法を紹介する
+かなり発展的な内容になるので全員が理解できなくても問題ない
+まずRのコードを書いていく上でとても便利なパイプ演算子(`%>%`)について説明する
+
+### 推定するモデルを作成1
+
+まず, 説明変数, コントロール変数, 応答変数を整理する
+
+```{r}
+formula_x <- "VOUCH0"
+formula_control <- "VOUCH0 +
+       SVY + HSVISIT + 
+       DMONTH1 + DMONTH2 + DMONTH3 +
+       DMONTH4 + DMONTH5 + DMONTH6 + DMONTH7 + DMONTH8 +
+       DMONTH9 + DMONTH10 + DMONTH11 + DMONTH12 +
+       AGE + SEX2 +
+       STRATA1 + STRATA2 + STRATA3 +
+       STRATA4 + STRATA5 + STRATA6 + STRATAMS"
+formula_y <- c(
+  "PRSCH_C","USNGSCH","PRSCHA_1","FINISH6","FINISH7",
+  "FINISH8","REPT6","REPT","NREPT")
+```
+
+### 推定するモデルを作成2
+
+各応答変数に対してコントロール変数を含まないモデルと含むモデルを作成し, それをベクトルとしてまとめ, データフレーム化する
+
+```{r}
+p_load(tibble)
+base_reg_formula        <- paste(formula_y, "~",    formula_x)
+names(base_reg_formula) <- paste(formula_y, "base", sep = "_")
+
+control_reg_formula     <- paste(formula_y, "~", formula_control)
+names(control_reg_formula) <- paste(formula_y, 
+                                    "control", sep = "_")
+
+models <- c(base_reg_formula, control_reg_formula) |> 
+  enframe(name = "model_index", value = "formula")```
+
+### 回帰分析をまとめて実行
+
+`purrr::map()`関数でまとめて回帰分析を実行し, `broom::tidy()`関数で結果を整理する
+
+```{r}
+p_load(purrr, broom)
+df_models <- models |> 
+  mutate(model = map(.x = formula, .f = lm, data = dat)) |> 
+  mutate(lm_result = map(.x = model, .f = broom::tidy))
+```
+
+### 結果を整形
+
+分析の結果を整形する
+
+```{r}
+p_load(tidyr)
+df_results <- df_models |> 
+  mutate(formula = as.character(formula)) |> 
+  select(formula, model_index, lm_result) |> 
+  unnest(cols = c(lm_result))
+```
+
+### 結果の表示
+
+説明変数の結果のみを抽出し, 確認する
+
+```{r}
+df_results %>% 
+  select(model_index, term:p.value) |>  
+  dplyr::filter(term == "VOUCH0")
+```
+
+### 結果の図示
+
+回帰係数と標準誤差から95%信頼区間を求めてプロットする
+
+```{r}
+p_load(ggplot2)
+df_results |> 
+  select(model_index, term:p.value) |> 
+  dplyr::filter(term == "VOUCH0") |> 
+  ggplot() +
+  aes(x = model_index,
+      y = estimate) +
+  geom_point() +
+  geom_errorbar(aes(ymin = estimate - std.error * 1.96,
+                    ymax = estimate + std.error * 1.96)) +
+  geom_hline(yintercept = 0) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
