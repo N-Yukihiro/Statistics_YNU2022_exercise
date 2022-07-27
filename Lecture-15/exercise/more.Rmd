@@ -1,0 +1,409 @@
+---
+title: "回帰分析徹底分解"
+output: html_notebook
+---
+
+### 利用するデータ
+
+datariumパッケージに含まれているmarketingデータを利用する
+Youtube広告, facebook広告, 新聞広告の予算と売り上げの関係を示したデータ
+    
+```{r}
+install.packages("datarium")
+library(datarium)
+data(marketing)
+```
+
+### データの構造
+
+str()関数を利用してデータの構造を確認する
+
+```{r}
+str(marketing)
+```
+
+### データの概要
+
+summary()関数を利用してデータの概要を把握する
+
+```{r}
+summary(marketing)
+```
+
+### データのペアプロット
+
+GGally::ggpairs()関数を利用してデータをペアプロットする
+
+```{r}
+library(ggplot2)
+library(GGally)
+ggpairs(marketing)
+```
+
+### 回帰分析
+
+同じデータに対して最小二乗法と最尤推定法を実行する
+ml0は説明変数を含まない切片のみの回帰モデル
+NULLモデルと呼ばれることもある
+
+```{r}
+ols1 <- lm(sales   ~ youtube, 
+           data    = marketing)
+ml1  <- glm(sales  ~ youtube, 
+            family = "gaussian",
+            data   = marketing)
+ml0  <- glm(sales  ~ 1, 
+            family = "gaussian",
+            data = marketing)
+```
+
+### 結果の確認(OLS)
+
+```{r}
+library(jtools)
+summ(ols1)
+```
+
+### 結果の確認(ML)
+
+```{r}
+summ(ml1)
+```
+
+### 最小二乗法と最尤推定法の推定結果
+
+線形回帰分析を最小二乗法と最尤推定法で行った結果は一致する
+値が完全に一致することをチェックするにはall.equal()関数を利用する
+推定された係数はobject$coefficientsで確認できる
+
+```{r}
+ols1$coefficients
+all.equal(ols1$coefficients,
+          ml1$coefficients)
+```
+
+### 定義に従って回帰係数の標準誤差を求める
+
+定義に従って回帰係数の標準誤差を求める
+
+```{r}
+p_load(magrittr)
+se <- sum(ols1$residuals^2) |> 
+  divide_by(ols1$df.residual) |> 
+  divide_by(subtract(marketing$youtube,
+                     marketing$youtube |> 
+                       mean()) |> 
+              raise_to_power(2) |> 
+              sum()) |> 
+  sqrt()
+se
+```
+
+実際に関数を用いて計算した結果と一致するか確認
+
+```{r}
+all.equal(summary(ols1)$coefficients[2,2],
+          se)
+```
+
+### 定義に従って回帰係数の検定統計量を求める
+
+定義に従って回帰係数の検定統計量を求める
+
+```{r}
+t <- ols1$coefficients[2] / se
+t
+```
+
+実際に関数を用いて計算した結果と一致するか確認
+
+```{r}
+all.equal(summary(ols1)$coefficients[2,3] |> as.numeric(),
+          t |> as.numeric())
+```
+
+###
+
+同様にp値も算出する
+
+```{r}
+p <- pt(q          = t, 
+        df         = ols1$df.residual,
+        lower.tail = FALSE) |> 
+  multiply_by(2)
+p
+```
+
+実際に関数を用いて計算した結果と一致するか確認
+
+```{r}
+all.equal(summary(ols1)$coefficients[2,4] |> 
+            as.numeric(),
+          p |> as.numeric())
+```
+
+### 回帰係数の検定統計量の臨界値
+
+Rの出力では表示されないが, 帰無仮説が棄却されるのかされないのかを分ける臨界値$C$は次のように求められる
+
+```{r}
+cv <- qt(p         = 0.025,
+         df        = ols1$df.residual,
+        lower.tail = FALSE)
+cv
+cv < as.numeric(t)
+```
+
+### 回帰係数の95%信頼区間
+
+定義に従って回帰係数の信頼区間を算出する
+
+```{r}
+ci    <- as.numeric(NULL)
+ci[1] <- add(ols1$coefficients[2],
+             qt(p  = 0.025, 
+                df = ols1$df.residual) |> 
+               multiply_by(se))
+ci[2] <- add(ols1$coefficients[2],
+             qt(p  = 0.975, 
+                df = ols1$df.residual) |> 
+               multiply_by(se))
+```
+
+実際に関数を用いて計算した結果と一致するか確認
+
+```{r}
+all.equal(confint(ols1)[2,] |> as.numeric(),
+          ci |> as.numeric())
+```
+
+### 標準回帰係数
+
+標準回帰係数はデータを標準化するためのscale()関数を用いれば良い
+
+```{r}
+sc <- marketing |> 
+  scale() |> 
+  as.data.frame() |> 
+  lm(sales ~ youtube, data = _)
+```
+
+実際に関数を用いて計算した結果と一致するか確認
+
+```{r}
+all.equal(summ(ols1, 
+               scale              = TRUE, 
+               transform.response = TRUE)$coeftable[2, 1],
+          summary(sc)$coefficient[2, 1])
+```
+
+###
+
+単回帰分析の標準回帰係数は応答変数と説明変数の相関係数と一致する
+
+```{r}
+all.equal(summ(ols1, 
+               scale              = TRUE, 
+               transform.response = TRUE)$coeftable[2, 1],
+          cor(marketing$sales, marketing$youtube))
+```
+
+### 標準回帰係数の変換
+
+応答変数の標準偏差を説明変数の標準偏差で除した値を標準回帰係数にかけると標準化前の回帰係数が得られる
+
+```{r}
+all.equal(summary(ols1)$coefficient[2, 1],
+          summary(sc)$coefficient[2, 1] |> 
+            multiply_by(divide_by(marketing$sales |> sd(),
+                                  marketing$youtube |> sd()
+                                  )
+                        )
+          )
+```
+
+### ナイーブな残差パラメーターの推定値
+
+定義にしたがってナイーブな残差パラメーターを推定する
+
+```{r}
+naive_sigma2 <- sum(ml1$residuals^2) / nrow(marketing)
+naive_sigma2
+```
+
+### 残差パラメーターの不偏推定
+
+定義にしたがって残差パラメーターを推定する
+
+```{r}
+sigma2 <- sum(ml1$residuals^2) / ml1$df.residual
+```
+
+実際に関数を用いて計算した結果と一致するか確認
+
+```{r}
+all.equal(summary(ml1)$dispersion,
+          sigma2)
+```
+
+### 決定係数1
+
+応答変数$y_i$と予測値$\hat{y_i}$の相関係数の2乗から決定係数を算出する
+
+```{r}
+r2.1 <- cor(ols1$fitted.values, marketing$sales)^2
+```
+
+実際に関数を用いて計算した結果と一致するか確認
+
+```{r}
+all.equal(summary(ols1)$r.square |> as.numeric,
+          r2.1)
+```
+
+### 決定係数2
+
+回帰係数が0の場合と比較して, どれだけ残差平方和が小さくなっているかを比で表し, 1から引いて算出する
+
+```{r}
+r2.2 <- subtract(1,
+                 divide_by(ols1$residuals |> 
+                             raise_to_power(2) |> 
+                             sum(),
+                           subtract(marketing$sales,
+                                    marketing$sales |>
+                                      mean()) |> 
+                             raise_to_power(2) |> 
+                             sum()))
+```
+
+実際に関数を用いて計算した結果と一致するか確認
+
+```{r}
+all.equal(r2.1,
+          r2.2)
+```
+
+### F値
+
+定義にしたがって検定統計量を算出する
+
+```{r}
+f <- divide_by(r2.1,
+               1 - r2.1) |> 
+  multiply_by(ols1$df.residual)
+f
+```
+
+実際に関数を用いて計算した結果と一致するか確認
+
+```{r}
+all.equal(summary(ols1)$fstatistic[1] |> as.numeric(),
+          f)
+```
+
+### 
+
+同様にp値も算出する
+
+```{r}
+pf(q          = f, 
+   df1        = 1, 
+   df2        = ols1$df.residual,
+   lower.tail = FALSE)
+```
+
+### 最大対数尤度の推定
+
+定義にしたがって最大対数尤度を求める
+
+```{r}
+LL <- divide_by(-nrow(marketing),
+                2) |> 
+  multiply_by(log(2 * pi * naive_sigma2)) |> 
+  subtract(ml1$residuals^2 |>
+             sum() |> 
+             divide_by(2 * naive_sigma2))
+LL
+```
+
+実際に関数を用いて計算した結果と一致するか確認
+
+```{r}
+all.equal(LL,
+          logLik(ml1) |> as.numeric())
+```
+
+### 注意
+
+`stargazer::stargazer()`関数で最尤推定法を計算した結果に表示される対数尤度は線形回帰(`glm()`関数を利用して推定し, かつ残差のパラメーターも推定するモデル)の場合, 誤っているので注意
+
+```{r}
+p_load(stargazer)
+stargazer(ml1,
+          type              = "text",
+          style             = "all", 
+          ci                = TRUE,
+          star.cutoffs      = NA, 
+          omit.table.layout = 'n',
+          align             = TRUE)
+```
+
+### Rで尤度比検定1
+
+Rで尤度比検定(likelihood-ratio test)を行うためには, `anova()`関数の中で`test = "LRT"`を指定する
+
+```{r}
+anova(ml1, test =  "LRT")
+```
+
+### Rで尤度比検定2
+
+`car::Anova()`でも尤度比検定を行うことができる
+
+```{r}
+car::Anova(ml1)
+```
+
+### Rで尤度比検定3
+
+やっていることはNULLモデルとフルモデルで分散分析
+
+```{r}
+anova(ml0, ml1, test = "Chisq")
+```
+
+### 尤度比検定1
+
+定義にしたがって尤度比検定を行う
+まずは残差逸脱度
+
+```{r}
+res_dev0 <- sum(ml0$residuals^2)
+res_dev0
+res_dev1 <- sum(ml1$residuals^2)
+res_dev1
+all.equal(res_dev0,
+          anova(ml0, ml1, test = "Chisq")[1, 2])
+all.equal(res_dev1,
+          anova(ml0, ml1, test = "Chisq")[2, 2])
+```
+
+### 尤度比検定2
+
+次に逸脱度(deviance)とp値を計算する
+
+```{r}
+dev <- res_dev0 - res_dev1
+dev
+dev / sigma2
+p <- pchisq(q = dev / sigma2, df = 1, lower.tail = F)
+p
+```
+
+実際に関数を用いて計算した結果と一致するか確認
+
+```{r}
+all.equal(p,
+          anova(ml1, test =  "LRT")[2,5])
+```
